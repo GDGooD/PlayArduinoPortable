@@ -1,2 +1,7 @@
 # PlayArduinoPortable
-Some classic games on Arduino using Adafruit OLED display and 2 buttons
+
+Classic games on Arduino using Adafruit OLED 128x64 display and 2 buttons
+
+-Invaders
+-Pong
+-Snake
