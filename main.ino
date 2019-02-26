@@ -3,6 +3,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <math.h>
+#include "LowPower.h"
 
 #define OLED_RESET 4
 Adafruit_SSD1306 display(OLED_RESET);
@@ -11,34 +12,41 @@ Adafruit_SSD1306 display(OLED_RESET);
 #error("Height incorrect, please fix Adafruit_SSD1306.h!");
 #endif
 
-#define BUTTON_L A3
-#define BUTTON_R A2
+#define BUTTON_L A2
+#define BUTTON_R 2
+
+void wakeUpHandler(){
+  
+}
+
 
 void screensaverBall(){
-  byte circleRadius = 7;
-  int hitCount = 0;
-  byte ballSpeed = 3;
-  boolean w = 1;
-  boolean h = 1;
-  byte x = circleRadius + 10;
-  byte y = circleRadius + 1;
+  byte circleRadius = 2 + random(8);
+  uint32_t hitCount = 0;
+  byte ballSpeed = 2 + random (5);
+  boolean w = random(1);
+  boolean h = random(1);
+  int8_t x = circleRadius + 2 + random(display.width() - circleRadius - 4);
+  int8_t y = circleRadius + 2 + random(display.height() - circleRadius - 4);
   
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
+  //display.setTextSize(1);
+  //display.setTextColor(WHITE);
   
   while(true){
+    if (digitalRead(BUTTON_R) or digitalRead(BUTTON_L))
+      return;
     display.drawCircle(x, y, circleRadius, WHITE);
-    display.setCursor(0, 0);
-    display.println(hitCount);
+    //display.setCursor(0, 0);
+    //display.println(hitCount);
     display.display();
     display.clearDisplay();
     if (x >= display.width() - circleRadius - 1 or x <= circleRadius){
       w = !w;
-      hitCount++;
+      //hitCount++;
     }
     if (y >= display.height() - circleRadius - 1 or y <= circleRadius){
       h = !h;    
-      hitCount++;
+      //hitCount++;
     }
     x = x + 2*ballSpeed*w - ballSpeed;
     y = y + 2*ballSpeed*h - ballSpeed;   
@@ -117,6 +125,8 @@ uint32_t spaceinvaders(){
   boolean checkL = 1;
   boolean checkWin = 1;
 
+  byte checkExit = 0;
+
   byte level = 0;
 
   uint32_t score = 0;
@@ -150,8 +160,25 @@ uint32_t spaceinvaders(){
       delay(2000);
     }
 
+
+    //////////
+    ///Exit///
+    //////////
+
+    if(digitalRead(BUTTON_L) and digitalRead(BUTTON_R)){
+      checkExit++;
+      if (checkExit > 40)
+        return score;
+    } 
+    else{
+      checkExit = 0;
+    }
+
+
     display.clearDisplay();
 
+
+    
     /////////////////
     ///ship moving///
     /////////////////
@@ -202,7 +229,7 @@ uint32_t spaceinvaders(){
       for (byte j=0; j < ALIENSY; j++){
         if (aliens[i][j] != 0){
           if (ALIENHEIGHT*j+ALIENSYDISTANCE*j+aliensPosY+ALIENHEIGHT > 62 - SHIPHEIGHT)
-            return score;
+            return score; //game over
           checkL = 0;
           checkWin = 0;
           aliensMaxR = i;
@@ -597,20 +624,20 @@ uint32_t pongGame(){
   display.setTextSize(2);
   display.setTextColor(WHITE);
   display.setCursor(0, 40);
-  display.print(F("PvP"));
-  display.setCursor(50, 20);
-  display.print(F("or"));
-  display.setCursor(80, 40);
   display.print(F("PvAI"));
+  display.setCursor(60, 20);
+  display.print(F("or"));
+  display.setCursor(90, 40);
+  display.print(F("PvP"));
   display.display();
   delay(1000);
   while (true){
     delay(100);
-    if (digitalRead(BUTTON_L)){
+    if (digitalRead(BUTTON_R)){
       isAI = false;
       break;
     }
-    if  (digitalRead(BUTTON_R)){
+    if  (digitalRead(BUTTON_L)){
       isAI = true;
       break;
     }
@@ -822,7 +849,7 @@ void greeting(){
 
 void shutdown(){
   uint8_t holdtimer = 0;
-  
+  //shutdown animation
   for (uint8_t i = 0; i<80; i += 5){
     display.fillCircle(display.width()/2, display.height()/2, i, WHITE);
     display.display();
@@ -840,17 +867,28 @@ void shutdown(){
   delay(2000);
   display.clearDisplay();
   display.display();
+  display.ssd1306_command(SSD1306_DISPLAYOFF); //off display
+  
+  //shutdown and wakeup
   while(true){
-    delay(6);
-    if (digitalRead(BUTTON_L) and digitalRead(BUTTON_R)){
+    attachInterrupt(0, wakeUpHandler, HIGH);
+    LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);//enter into low power mode
+    detachInterrupt(0);
+    //out of low power mode
+    holdtimer = 0;
+    while (digitalRead(BUTTON_L) and digitalRead(BUTTON_R)){ //press LR for 2 sec to return
+      delay(7);
       holdtimer++;
-      if (holdtimer > 200)
+      if (holdtimer > 200){      
+        display.ssd1306_command(SSD1306_DISPLAYON);
+        delay(250); //display has some wakeup time, so we pause for smoothly startup animation
         return;
+      }
     }
-    else
-      holdtimer = 0;
   }
 }
+
+
 
 void about(){
   display.clearDisplay();
@@ -874,6 +912,7 @@ void about(){
 void mainmenu(){
   byte menuselect = 0;
   boolean isKeyPressed = false;
+  byte ssTimeout = 0;
 
   greeting();
        
@@ -942,8 +981,16 @@ void mainmenu(){
           menuselect = 0;
         break;
       }
-      if (!digitalRead(BUTTON_L) and !digitalRead(BUTTON_R))
+      if (!digitalRead(BUTTON_L) and !digitalRead(BUTTON_R)){
         isKeyPressed = false;
+        ssTimeout++;
+        if (ssTimeout > 250){
+          screensaverBall();
+          ssTimeout = 0;
+          isKeyPressed = true;
+          break;
+        }
+      }
     }
   }
 }
